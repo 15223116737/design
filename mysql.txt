@@ -1,0 +1,29 @@
+sql = "select trajectory.duration,trajectory.time,data.dust \
+    from trajectory inner join data on trajectory.time = data.time \
+    and trajectory.location_id = data.sensor_id\
+    WHERE worker_id=%s ORDER BY time"
+#INNER JOIN（内连接,或等值连接）：获取两个表中字段匹配关系的记录。
+
+sql = "SELECT worker_id FROM trajectory GROUP BY worker_id"
+#GROUP By根据一个或多个列对结果进行分组
+
+sql1 = """INSERT INTO `dusthistory`(worker_id, dust_sum,time) values(%s, %s, %s)"""
+#INSERT 插入语句
+
+sql = "SELECT dusthistory.dust_sum FROM dusthistory WHERE worker_id=%s ORDER BY time DESC LIMIT 1"
+
+sql_worker = "SELECT * FROM trajectory WHERE worker_id=%s ORDER BY time DESC LIMIT 3"
+#ORDER BY time DESC LIMIT 3降序排列 
+#ASC升序排列
+#默认按升序排列
+
+sql_update = "SELECT * FROM data ORDER BY time DESC LIMIT 2"
+
+sql_update = "SELECT * FROM data ORDER BY time DESC LIMIT 2"
+
+sql_check = "SELECT * FROM data WHERE sensor_id=%s ORDER BY time"
+
+sql_update = "SELECT * FROM data ORDER BY time DESC LIMIT 2"
+
+#LIMIT num 表示从表中选取头num条数据
+

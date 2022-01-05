@@ -2,6 +2,9 @@ import sys
 import pymysql
 import numpy as np
 import matplotlib.pyplot as plt
+ 
+plt.rcParams['font.sans-serif']=['SimHei'] #显示中文标签
+plt.rcParams['axes.unicode_minus']=False   #这两行需要手动设置
 
 # 1. Import `QApplication` and all the required widgets
 from PyQt5 import QtCore
@@ -13,10 +16,15 @@ from PyQt5.QtWidgets import QLabel, QPushButton, QTableWidget, QTableWidgetItem,
 from PyQt5.QtWidgets import QWidget, QComboBox, QVBoxLayout, QHBoxLayout
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
 from PyQt5.QtCore import QTimer
+from matplotlib import patches 
+
 
 # from matplotlib.backends.backend_qt5agg import NavigationToolbar2QT as NavigationToolbar
 
-db = pymysql.connect("localhost", "server", "123456", "server")
+db = pymysql.connect(host = "localhost", 
+                     user = "root",
+                     password =  "root",
+                     database =  "test0")
 cursor = db.cursor()
 
 x_coordinate = [2, 4, 6, 9]  # 监测点横坐标
@@ -32,8 +40,11 @@ def y_coor(i):
 
 
 def calculate_worker_dust(worker_id):
-    dbt = pymysql.connect("localhost", "server", "123456", "server")
+    dbt = pymysql.connect("localhost", "root", "root", "test0")
     cursort = dbt.cursor()
+    # trajectory 轨迹表包含duratioon time location_id worker_id
+    # data 数据表包含dust sensor_id
+    # 返回轨迹表的持续时间，时间，和数据表的烟尘量 找出数据表和轨迹表时间和位置号与传感器号相同的
     sql = "select trajectory.duration,trajectory.time,data.dust \
     from trajectory inner join data on trajectory.time = data.time \
     and trajectory.location_id = data.sensor_id\
@@ -51,30 +62,35 @@ def calculate_worker_dust(worker_id):
 
 
 def establish_workers_dust():
-    dbt = pymysql.connect("localhost", "server", "123456", "server")
+    dbt = pymysql.connect("localhost", "root", "root", "test0")
     cursort = dbt.cursor()
     bar_x = []
     bar_y = []
+    # 查询trajectory表中工人个数？
     sql = "SELECT worker_id FROM trajectory GROUP BY worker_id"
     cursort.execute(sql)
     datas = cursort.fetchall()
     print("datas", datas)
     for data in datas:
         print("data[0]", data[0])
+        #调用calculate_worker_dust(work_id)计算每个工人的累计受尘量和 时间
         dust_sum, dtime = calculate_worker_dust(int(data[0]))
         bar_x.append(int(data[0]))
         bar_y.append(dust_sum)
-        dbt1 = pymysql.connect("localhost", "server", "123456", "server")
+        dbt1 = pymysql.connect("localhost", "root", "root", "test0")
         cursort1 = dbt1.cursor()
+        #将计算得到的对应worker_id的累计受尘量和dtime插入dusthistory表
         sql1 = """INSERT INTO `dusthistory`(worker_id, dust_sum,time) values(%s, %s, %s)"""
         try:
             cursort1.execute(sql1, (int(data[0]), dust_sum, dtime))
+            # 提交到数据库执行
             dbt1.commit()
             dbt1.close()
         except Exception:
             print("数据不需要更新")
             dbt1.close()
     dbt.close()
+    # 产生len(bar_y)个100的数组
     bar_ylimit = [100 for i in range(len(bar_y))]
     bar_gap = []
     bar_absgap = []
@@ -85,25 +101,28 @@ def establish_workers_dust():
             bar_absgap.append(0)
         else:
             bar_absgap.append(bar_gap[i])
+    #matplotlib中的画图函数
     axes4.cla()
+    #画对应工人的累计受尘量
     axes4.bar(bar_x, bar_y)
     axes4.bar(bar_x, bar_absgap, bottom=bar_y)
     canvas_bar.draw()
 
 
 def search_worker_dust(worker_id):
-    dbt = pymysql.connect("localhost", "server", "123456", "server")
+    dbt = pymysql.connect("localhost", "root", "root", "test0")
     cursort = dbt.cursor()
     sql = "SELECT dusthistory.dust_sum FROM dusthistory WHERE worker_id=%s ORDER BY time DESC LIMIT 1"
     cursort.execute(sql, worker_id)
     data = cursort.fetchone()
     # print("搜索到的累积量:",str(data[0]),'mg/m^3')
     dbt.close()
+    # dusthistory表的第一表项是dust_sum
     label_dust.setText("搜索到的累积量:" + str(data[0]) + 'mg/m^3')
 
 
 def plot_worker(worker_id):
-    dbt = pymysql.connect("localhost", "server", "123456", "server")
+    dbt = pymysql.connect("localhost", "root", "root", "test0")
     cursort = dbt.cursor()
     sql_worker = "SELECT * FROM trajectory WHERE worker_id=%s ORDER BY time DESC LIMIT 3"
     cursort.execute(sql_worker, worker_id)
@@ -115,22 +134,25 @@ def plot_worker(worker_id):
     for row in data:
         xnum.append(x_coor(row[0]))
         ynum.append(y_coor(row[0]))
+        # trajectory 的第[3]表项为duration
         duration.append(row[3])
     axes3.cla()
     axes3.plot(xnum, ynum)
-    axes3.scatter(xnum, ynum, marker='o', s=duration * 100, alpha=0.3)
+    #原代码中duration*100
+    axes3.scatter(xnum, ynum, marker='o', s=duration, alpha=0.3)
     # 显示图表
     canvas_worker.draw()
 
 
 def plot_piechart():
-    dbt = pymysql.connect("localhost", "server", "123456", "server")
+    dbt = pymysql.connect("localhost", "root", "root", "test0")
     cursort = dbt.cursor()
     dic = {}
     sql_update = "SELECT * FROM data ORDER BY time DESC LIMIT 2"
     cursort.execute(sql_update)
     data = cursort.fetchall()
     dbt.close()
+    # row[0:-1]从第1项截取到倒数第一项（不包含）
     for row in data:
         dic[row[4]] = row[0:-1]
     # rank_dic = sorted(dic.items(), key = lambda kv:kv[1][2])
@@ -145,9 +167,9 @@ def plot_piechart():
             num_excede = num_excede + 1
         else:
             num_normal = num_normal + 1
-    sizes = [num_normal, num_excede]
-    # print("sizes:",sizes)
-    patches, l_text, p_text = axes2.pie(sizes, explode=explode, labels=labels,
+    sum_all = num_normal + num_excede
+    sizes = [num_normal/sum_all, num_excede/sum_all]
+    patches, l_text, p_text = axes2.pie(sizes, explode=explode, labels=labels, normalize=False,
                                         labeldistance=1.1, autopct='%1.1f%%', shadow=False,
                                         startangle=90, pctdistance=0.6)
     # 改变文本的大小
@@ -171,7 +193,7 @@ def fun1():
 
 
 def rank_point():
-    dbt = pymysql.connect("localhost", "server", "123456", "server")
+    dbt = pymysql.connect("localhost", "root", "root", "test0")
     cursort = dbt.cursor()
     dic = {}
     sql_update = "SELECT * FROM data ORDER BY time DESC LIMIT 2"
@@ -180,6 +202,7 @@ def rank_point():
     for row in data:
         dic[row[4]] = row[0:-1]
     rank_dic = sorted(dic.items(), key=lambda kv: kv[1][2])
+    print(rank_dic)
     print("自动更新rank:", rank_dic)
     table_rank.setItem(1, 0, QTableWidgetItem(str(rank_dic[0][0])))
     table_rank.setItem(1, 1, QTableWidgetItem(str(rank_dic[0][1][2])))
@@ -189,7 +212,7 @@ def rank_point():
 
 
 def check_point_history(sensor_id):
-    dbt = pymysql.connect("localhost", "server", "123456", "server")
+    dbt = pymysql.connect("localhost", "root", "root", "test0")
     cursort = dbt.cursor()
     sql_check = "SELECT * FROM data WHERE sensor_id=%s ORDER BY time"
     cursort.execute(sql_check, sensor_id)
@@ -215,7 +238,7 @@ def check_point_history(sensor_id):
 
 
 def selectionchange():
-    dbt = pymysql.connect("localhost", "server", "123456", "server")
+    dbt = pymysql.connect("localhost", "root", "root", "test0")
     cursort = dbt.cursor()
     dic = {}
     sql_update = "SELECT * FROM data ORDER BY time DESC LIMIT 2"
@@ -225,6 +248,9 @@ def selectionchange():
     for row in data:
         dic[row[4]] = row[0:-1]
     id = int(box.currentText())
+    # print("id:", id)
+    # print('dic', dic)
+    # print("here", dic[0])
     dust = dic[id][2]
     temper = dic[id][1]
     humidity = dic[id][0]
@@ -234,7 +260,6 @@ def selectionchange():
     table_point_data.setItem(2, 1, QTableWidgetItem(str(temper)))
     table_point_data.setItem(3, 1, QTableWidgetItem(str(humidity)))
     table_point_data.setItem(4, 1, QTableWidgetItem(str(dtime)))
-
 
 app = QApplication([])
 
@@ -370,4 +395,6 @@ window.setPalette(pe)
 window.show()
 
 # 5. Run your application's event loop (or main loop)
+fun1()
 sys.exit(app.exec_())
+
